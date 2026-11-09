@@ -18,6 +18,7 @@ COMMANDS: dict[str, str] = {
     "ping": "check that the app is running",
     "toggle-overlay": "show/hide the map overlay",
     "pick-map": "choose the map manually",
+    "set-map": "set the map by (partial) name, e.g. `ctl set-map pale rose`",
     "pick-killer": "choose your killer manually",
     "streak-win": "record a win for the current category",
     "streak-loss": "record a loss",
@@ -28,28 +29,34 @@ COMMANDS: dict[str, str] = {
 }
 
 # A handler returns an optional message for the caller; raising = error reply.
-CommandHandler = Callable[[], str | None]
+# Handlers registered with takes_arg=True receive the rest of the line.
+CommandHandler = Callable[..., str | None]
 
 
 class CommandRouter:
     def __init__(self) -> None:
-        self._handlers: dict[str, CommandHandler] = {}
+        self._handlers: dict[str, tuple[CommandHandler, bool]] = {}
 
-    def register(self, name: str, handler: CommandHandler) -> None:
+    def register(self, name: str, handler: CommandHandler, takes_arg: bool = False) -> None:
         if name not in COMMANDS:
             raise ValueError(f"unknown command {name!r}; add it to COMMANDS first")
-        self._handlers[name] = handler
+        self._handlers[name] = (handler, takes_arg)
 
-    def dispatch(self, name: str) -> str:
-        """Run a command; always returns a one-line reply starting with 'ok' or 'error'."""
-        name = name.strip()
+    def dispatch(self, line: str) -> str:
+        """Run 'name [argument...]'; always returns a one-line reply starting with 'ok' or 'error'."""
+        name, _, arg = line.strip().partition(" ")
+        arg = arg.strip()
         if name not in COMMANDS:
             return f"error: unknown command {name!r}"
-        handler = self._handlers.get(name)
-        if handler is None:
+        if name not in self._handlers:
             return f"error: {name} is not available yet"
+        handler, takes_arg = self._handlers[name]
+        if arg and not takes_arg:
+            return f"error: {name} takes no argument"
+        if takes_arg and not arg:
+            return f"error: {name} needs an argument"
         try:
-            msg = handler()
+            msg = handler(arg) if takes_arg else handler()
         except Exception as e:
             log.exception("command %s failed", name)
             return f"error: {e}"

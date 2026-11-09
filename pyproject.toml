@@ -9,7 +9,10 @@ requires-python = ">=3.14"
 dependencies = [
     "numpy>=2.5.4",
     "opencv-python-headless>=5.0.0.93",
-    "pyside6>=6.12.0",
+    # Linux: use the distro PySide6 (pacman -S pyside6 layer-shell-qt). The
+    # layer-shell overlay plugin must share the system Qt; the pip wheel bundles its own.
+    # Create the venv once with: uv venv --system-site-packages
+    "pyside6>=6.8; sys_platform == 'win32'",
     "pytesseract>=0.3.13",
     "rapidfuzz>=3.14.6",
     "tomli-w>=1.2.0",

@@ -26,6 +26,7 @@ def main(argv: list[str] | None = None) -> int:
 
     ctl = sub.add_parser("ctl", help="send a command to the running app")
     ctl.add_argument("command", nargs="?", choices=sorted(COMMANDS), metavar="command")
+    ctl.add_argument("arg", nargs="*", help="argument, e.g. a map name for set-map")
     ctl.add_argument("--list", action="store_true", help="list available commands")
 
     rp = sub.add_parser("replay", help="run detection on saved screenshots (no game needed)")
@@ -62,7 +63,7 @@ def _ctl(args: argparse.Namespace) -> int:
         return 0
     from .ipc import send_command
 
-    reply = send_command(args.command, paths.control_socket_name())
+    reply = send_command(" ".join([args.command, *args.arg]), paths.control_socket_name())
     if reply is None:
         print("dbd-overlay is not running", file=sys.stderr)
         return 1

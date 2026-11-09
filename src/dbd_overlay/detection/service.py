@@ -15,7 +15,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from ..core.events import EventBus
+from ..core.events import EventBus, GameWindowChanged
 from ..platform.base import ScreenCapture, WindowInfo, WindowLocator
 from .map_detector import CardReading, TitleCardReader, TitleCardTracker
 
@@ -43,6 +43,7 @@ class DetectionService:
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="detection", daemon=True)
         self._window_state: str | None = None
+        self._first_report = True
         self._last_debug_save = 0.0
         self._canvas: np.ndarray | None = None
 
@@ -101,7 +102,11 @@ class DetectionService:
         state = "missing" if win is None else ("visible" if win.visible else "hidden")
         if state != self._window_state:
             log.info("game window: %s%s", state, f" ({win.width}x{win.height})" if win else "")
+            was_visible = self._window_state == "visible"
             self._window_state = state
+            if (state == "visible") != was_visible or self._first_report:
+                self.bus.publish(GameWindowChanged(state == "visible"))
+            self._first_report = False
 
     def _maybe_save_debug(self, frame, reading: CardReading) -> None:
         """Save teal-separator frames that didn't resolve to a map, to improve detection."""

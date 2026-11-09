@@ -28,6 +28,13 @@ class Event:
 
 
 @dataclass(frozen=True)
+class GameWindowChanged(Event):
+    """The game window appeared/disappeared or its workspace was (un)shown."""
+
+    visible: bool
+
+
+@dataclass(frozen=True)
 class MatchStarted(Event):
     pass
 

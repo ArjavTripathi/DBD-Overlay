@@ -43,6 +43,8 @@ class CaptureConfig:
 
 @dataclass
 class OverlayConfig:
+    # Folder containing maps/<realm>/<map>.<png|webp|jpg>. Empty = <data dir>/assets.
+    assets_dir: str = ""
     auto_show: bool = True
     opacity: float = 0.85
     x: int = 40

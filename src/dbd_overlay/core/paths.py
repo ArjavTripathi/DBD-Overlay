@@ -38,6 +38,10 @@ def log_file() -> Path:
     return data_dir() / "dbd-overlay.log"
 
 
+def assets_dir(configured: str) -> Path:
+    return Path(configured).expanduser() if configured else data_dir() / "assets"
+
+
 def control_socket_name() -> str:
     """Name for QLocalServer: a full socket path on Unix, a pipe name on Windows."""
     if sys.platform == "win32":

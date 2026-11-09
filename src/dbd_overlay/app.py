@@ -21,6 +21,7 @@ from .detection.service import DetectionService
 from .features.map_overlay import MapOverlayFeature
 from .ipc import ControlServer
 from .storage.db import Database
+from .ui.overlay import OverlayWindow, create_engine, platform_variant
 from .ui.tray import Tray
 
 log = logging.getLogger(__name__)
@@ -60,8 +61,6 @@ class App:
         self.tray = Tray(self.router.dispatch)
 
         catalog = load_maps()
-        self.map_feature = MapOverlayFeature(self.bus, self.router, catalog, self.tray.notify)
-
         self.detection: DetectionService | None = None
         try:
             locator, capture = platform.create(self.cfg.capture.window_class)
@@ -72,6 +71,30 @@ class App:
             self.detection = DetectionService(
                 locator, capture, TitleCardReader(catalog), self.bus, self.cfg.capture.poll_seconds, debug_dir
             )
+
+        self.qml, self.images = create_engine(platform_variant())
+        o = self.cfg.overlay
+        self.map_feature: MapOverlayFeature | None = None
+        try:
+            window = OverlayWindow(self.qml, self.images, (o.x, o.y, o.width, o.height), o.opacity)
+        except RuntimeError as e:
+            log.error("map overlay disabled: %s", e)
+        else:
+            self.map_feature = MapOverlayFeature(
+                self.bus, self.router, catalog, window,
+                assets_dir=paths.assets_dir(o.assets_dir),
+                auto_show=o.auto_show,
+                notify=self.tray.notify,
+                save_geometry=self._save_overlay_geometry,
+                # Without detection we can't know where the game is: assume visible.
+                game_visible=self.detection is None,
+            )
+
+    def _save_overlay_geometry(self, geometry: tuple[int, int, int, int]) -> None:
+        o = self.cfg.overlay
+        o.x, o.y, o.width, o.height = geometry
+        config_mod.save(self.cfg, self.config_path)
+        log.info("overlay geometry saved: %s", geometry)
 
     def _quit(self) -> str:
         # Reply to the caller first, then quit once control returns to the loop.

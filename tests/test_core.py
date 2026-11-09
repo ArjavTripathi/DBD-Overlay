@@ -53,6 +53,15 @@ def test_router_replies():
     assert r.dispatch("rm -rf").startswith("error: unknown command")
 
 
+def test_router_arguments():
+    r = CommandRouter()
+    r.register("set-map", lambda arg: arg.upper(), takes_arg=True)
+    r.register("ping", lambda: "running")
+    assert r.dispatch("set-map  pale rose \n") == "ok: PALE ROSE"
+    assert r.dispatch("set-map") == "error: set-map needs an argument"
+    assert r.dispatch("ping extra") == "error: ping takes no argument"
+
+
 def test_router_rejects_unknown_registration():
     with pytest.raises(ValueError):
         CommandRouter().register("typo", lambda: None)
