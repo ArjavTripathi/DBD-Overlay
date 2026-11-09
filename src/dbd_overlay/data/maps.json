@@ -1,0 +1,26 @@
+{
+  "_comment": "Realm -> maps, canonical names as shown on the in-game title card (map = bright line, realm = dim line below). Entries marked unverified have not been seen on a real title card yet. Optional per-map aliases: {\"name\": ..., \"aliases\": [...]}.",
+  "realms": [
+    {"name": "The MacMillan Estate", "maps": ["Coal Tower", "Groaning Storehouse", "Ironworks of Misery", "Shelter Woods", "Suffocation Pit"]},
+    {"name": "Autohaven Wreckers", "maps": ["Azarov's Resting Place", "Blood Lodge", "Gas Heaven", "Wreckers' Yard", "Wretched Shop"]},
+    {"name": "Coldwind Farm", "maps": ["Fractured Cowshed", "Rancid Abattoir", "Rotten Fields", "The Thompson House", "Torment Creek"]},
+    {"name": "Crotus Prenn Asylum", "maps": ["Disturbed Ward", "Father Campbell's Chapel"]},
+    {"name": "Haddonfield", "maps": ["Lampkin Lane"]},
+    {"name": "Backwater Swamp", "maps": ["The Pale Rose", "Grim Pantry"], "verified": true},
+    {"name": "Léry's Memorial Institute", "aliases": ["Lery's Memorial Institute"], "maps": ["Treatment Theatre"]},
+    {"name": "Red Forest", "maps": ["Mother's Dwelling", "The Temple of Purgation"]},
+    {"name": "Springwood", "maps": ["Badham Preschool"]},
+    {"name": "Gideon Meat Plant", "maps": ["The Game"]},
+    {"name": "Yamaoka Estate", "maps": ["Family Residence", "Sanctum of Wrath"]},
+    {"name": "Ormond", "maps": ["Mount Ormond Resort", "Ormond Lake Mine"]},
+    {"name": "Hawkins National Laboratory", "maps": ["The Underground Complex"]},
+    {"name": "Grave of Glenvale", "maps": ["Dead Dawg Saloon"]},
+    {"name": "Silent Hill", "maps": ["Midwich Elementary School"]},
+    {"name": "Raccoon City", "maps": ["Raccoon City Police Station East Wing", "Raccoon City Police Station West Wing"]},
+    {"name": "Forsaken Boneyard", "maps": ["Dead Sands", "Eyrie of Crows"]},
+    {"name": "Withered Isle", "maps": ["Garden of Joy", "Greenville Square", "Freddy Fazbear's Pizza", "Fallen Refuge"]},
+    {"name": "The Decimated Borgo", "maps": ["The Shattered Square", "Forgotten Ruins"]},
+    {"name": "Dvarka Deepwood", "maps": ["Toba Landing", "Nostromo Wreckage"]},
+    {"name": "Sleepless District", "maps": ["Trickster's Delusion"], "_comment": "unverified (copied from the RPC project)"}
+  ]
+}

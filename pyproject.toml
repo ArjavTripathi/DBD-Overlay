@@ -1,0 +1,31 @@
+[project]
+name = "dbd-overlay"
+version = "0.1.0"
+description = "Dead by Daylight map overlay + winstreak HUD (screen capture only, no game hooks)"
+authors = [
+    { name = "ArjavTripathi", email = "arjavtri@iastate.edu" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "numpy>=2.5.4",
+    "opencv-python-headless>=5.0.0.93",
+    "pyside6>=6.12.0",
+    "pytesseract>=0.3.13",
+    "rapidfuzz>=3.14.6",
+    "tomli-w>=1.2.0",
+]
+
+[project.scripts]
+dbd-overlay = "dbd_overlay.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.13.1,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

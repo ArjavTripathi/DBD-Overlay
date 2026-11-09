@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+dist/
+debug/
+
+# User-supplied game art (Behaviour Interactive's IP): never commit.
+assets/*
+!assets/README.md
