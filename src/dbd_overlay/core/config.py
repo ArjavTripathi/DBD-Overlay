@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import re
 import tomllib
 import typing
 from dataclasses import dataclass, field
@@ -21,6 +22,7 @@ log = logging.getLogger(__name__)
 KILLER_PRESETS = ("4k", "3k_hatch", "3k_any", "custom")
 SURVIVOR_PRESETS = ("i_escape", "3_out", "4_out", "custom")
 HUD_SHOW = ("always", "match_end", "hotkey")
+HUD_LAYOUTS = ("card", "compact")
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 
 
@@ -60,6 +62,30 @@ class HudConfig:
     scale: float = 1.0
     x: int = 40
     y: int = 700
+    # Look (all editable in Settings > HUD, previewed live).
+    layout: str = "card"            # card (icon, title, numbers) | compact (icon + number)
+    show_icon: bool = True
+    show_title: bool = True
+    show_attempt: bool = True
+    show_best: bool = True
+    icon_size: int = 64
+    accent: str = "#e0c040"         # prompts, edit frame
+    text_color: str = "#ffffff"
+    background: str = "#101014"
+    background_opacity: float = 0.82
+    border: bool = True
+    corner_radius: int = 10
+    font: str = ""                  # font family; empty = system default
+    survivor_title: str = "Survivor Streak"
+    killer_title: str = "Killer Streak: {killer}"   # {killer} = 'Hillbilly'
+
+
+@dataclass
+class IconsConfig:
+    """Icons picked in Settings > Icons (full paths). Anything not set here
+    falls back to <assets>/icons/survivor.png, <assets>/icons/killers/<name>.png."""
+    survivor: str = ""
+    killers: dict[str, str] = field(default_factory=dict)   # "The Hillbilly" = "/path/to/img.png"
 
 
 @dataclass
@@ -76,12 +102,26 @@ class StreakConfig:
 
 
 @dataclass
+class DiscordConfig:
+    """Discord status ("Rich Presence"). Needs your own Discord application:
+    discord.com/developers/applications > New Application; its NAME is what
+    Discord shows after "Playing". Paste its Application ID as client_id."""
+    enabled: bool = False
+    client_id: str = ""
+    # Optional: an image key uploaded under Rich Presence > Art Assets, or an https URL.
+    large_image: str = ""
+    show_map: bool = True
+
+
+@dataclass
 class Config:
     general: GeneralConfig = field(default_factory=GeneralConfig)
     capture: CaptureConfig = field(default_factory=CaptureConfig)
     overlay: OverlayConfig = field(default_factory=OverlayConfig)
     hud: HudConfig = field(default_factory=HudConfig)
     streaks: StreakConfig = field(default_factory=StreakConfig)
+    icons: IconsConfig = field(default_factory=IconsConfig)
+    discord: DiscordConfig = field(default_factory=DiscordConfig)
 
 
 # --------------------------------------------------------------------------
@@ -99,6 +139,11 @@ def _build[T](cls: type[T], data: dict[str, Any], path: str) -> T:
             if not isinstance(value, dict):
                 raise ConfigError(f"[{key}] must be a table")
             kwargs[f.name] = _build(expected, value, f"{key}.")
+            continue
+        if typing.get_origin(expected) is dict:
+            if not isinstance(value, dict) or not all(isinstance(v, str) for v in value.values()):
+                raise ConfigError(f"[{key}] must be a table of strings")
+            kwargs[f.name] = dict(value)
             continue
         if expected is float and isinstance(value, int) and not isinstance(value, bool):
             value = float(value)  # TOML `1` for a float field is fine
@@ -135,6 +180,16 @@ def validate(cfg: Config) -> None:
     _check_range("streaks.custom_killer_required", cfg.streaks.custom_killer_required, 0, 4)
     _check_range("streaks.custom_survivor_min_escapes", cfg.streaks.custom_survivor_min_escapes, 0, 4)
     _check_range("hud.scale", cfg.hud.scale, 0.5, 3)
+    _check_choice("hud.layout", cfg.hud.layout, HUD_LAYOUTS)
+    _check_range("hud.icon_size", cfg.hud.icon_size, 16, 256)
+    _check_range("hud.background_opacity", cfg.hud.background_opacity, 0, 1)
+    _check_range("hud.corner_radius", cfg.hud.corner_radius, 0, 40)
+    for name in ("accent", "text_color", "background"):
+        if not re.fullmatch(r"#[0-9a-fA-F]{6}", getattr(cfg.hud, name)):
+            raise ConfigError(f"hud.{name}: expected a colour like #e0c040")
+    cid = cfg.discord.client_id.strip()
+    if cid and not cid.isdigit():
+        raise ConfigError("discord.client_id: expected the numeric Application ID")
 
 
 def from_dict(data: dict[str, Any]) -> Config:

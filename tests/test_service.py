@@ -89,7 +89,7 @@ def test_stale_regions_are_cleared():
     """A region captured last tick but not this one must not linger in the canvas."""
     svc, _ = make_service(WIN, FakeCapture(cv2.imread(str(FIX / "233233.png"))))
     svc.detector.tracker.phase = svc.detector.tracker.phase.MATCH  # lobby checks only run in a match
-    from dbd_overlay.detection.end_screen import LOBBY_BUTTON
+    from dbd_overlay.detection.lobby import LOBBY_BUTTON
     frame = svc._grab(WIN, [LOBBY_BUTTON])
     assert frame[LOBBY_BUTTON.rect(2560, 1440)[1] + 5].any()
     frame = svc._grab(WIN, [])

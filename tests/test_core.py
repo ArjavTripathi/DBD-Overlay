@@ -115,3 +115,22 @@ def test_config_bad_toml(tmp_path):
     path.write_text("this is = = not toml")
     with pytest.raises(config.ConfigError):
         config.load(path)
+
+
+def test_icons_and_hud_style_config_roundtrip(tmp_path):
+    from dbd_overlay.core import config as c
+    cfg = c.Config()
+    cfg.icons.killers["The Hillbilly"] = "/x/billy.png"
+    cfg.hud.layout, cfg.hud.accent = "compact", "#ff0000"
+    c.save(cfg, tmp_path / "c.toml")
+    back = c.load(tmp_path / "c.toml")
+    assert back.icons.killers == {"The Hillbilly": "/x/billy.png"} and back.hud.layout == "compact"
+
+
+def test_bad_hud_colour_and_icon_table_rejected():
+    import pytest
+    from dbd_overlay.core import config as c
+    with pytest.raises(c.ConfigError):
+        c.from_dict({"hud": {"accent": "red"}})
+    with pytest.raises(c.ConfigError):
+        c.from_dict({"icons": {"killers": {"The Pig": 3}}})

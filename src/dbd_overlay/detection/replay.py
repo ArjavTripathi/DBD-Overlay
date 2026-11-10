@@ -12,6 +12,7 @@ Manifest: per-file expectations; only the keys present are checked.
      "233047.png": {"map": null},                         <- no map detected
      "230226.png": {"end": {"kind": "scoreboard", "killer": "The Slasher", "role": "killer"}},
      "225210.png": {"end": null, "lobby": false, "egc": false},
+     "163745.webp": {"lobby": true, "lobby_role": "killer", "lobby_killer": "The Hillbilly"},
      "230226.png": {"statuses": "EKEK"}}          <- E/K/F(lag)/A(live)/D/? per survivor
 """
 
@@ -76,6 +77,11 @@ def check(t: TickResult, expected: dict) -> list[str]:
         failed.append("end")
     if "lobby" in expected and bool(t.lobby) != expected["lobby"]:
         failed.append("lobby")
+    lr = t.lobby_reading
+    if "lobby_role" in expected and ((lr.role.value if lr and lr.role else None) != expected["lobby_role"]):
+        failed.append("lobby_role")
+    if "lobby_killer" in expected and (lr.killer if lr else None) != expected["lobby_killer"]:
+        failed.append("lobby_killer")
     if "egc" in expected and bool(t.egc) != expected["egc"]:
         failed.append("egc")
     if "statuses" in expected:
@@ -100,7 +106,8 @@ def describe(t: TickResult) -> str:
             s += f" survivors={''.join(STATUS_CODES[st] for st in b.statuses)}"
         parts.append(s)
     if t.lobby:
-        parts.append("lobby")
+        lr = t.lobby_reading
+        parts.append(f"lobby {lr.button} role={lr.role} killer={lr.killer}" if lr else "lobby")
     if t.egc:
         parts.append("EGC")
     return "  |  ".join(parts) or "nothing"

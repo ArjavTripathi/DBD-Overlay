@@ -143,6 +143,16 @@ can't be read, a picker asks (killer), and the frame is saved to `debug/`.
 If the lobby's PLAY/READY/CANCEL button shows up mid-match (disconnect,
 crash), the match is ended too.
 
+**In the lobby** (checked every 4 s) the role is known before the match, so the
+HUD switches to the right streak as soon as you queue:
+
+- killer lobbies print your killer under the READY/CANCEL button
+  (`THE HILLBILLY  1:04`), and lobby sub-pages show it top-left
+  (`THE SLASHER / CHARACTERS`): killer + which one;
+- queued or ready with nothing under the button: survivor (needs two checks
+  in a row, since it's inferred from something missing);
+- plain PLAY with no killer name: unknown, nothing changes.
+
 Your killer is remembered across restarts (`state.json`, last killer you
 played, never the opponent's). Manual override:
 
@@ -243,11 +253,29 @@ appeared, both were possible, so a `3k_hatch` match with one escape asks you.
 - `toggle-hud`: show/hide the HUD (`[hud] show = "match_end" | "always" | "hotkey"`).
 - `dbd-overlay export history.csv` / `.json`, `dbd-overlay import history.json`.
 
+### Settings window
+
+Left-click the tray icon (or `dbd-overlay ctl settings`). Pages:
+
+- **Streaks**: switch each streak on/off, with its current numbers.
+- **Win rules**: killer/survivor presets or custom rules; "Save & re-judge
+  history" applies them to past matches too.
+- **HUD**: when it shows, layout (card or compact), which parts to show,
+  icon size, size, opacity, colours, border, corner radius, font and the
+  titles (`{killer}` = killer name). The HUD stays on screen while this page
+  is open and every change previews live; Cancel reverts. "Move it on
+  screen…" = `edit-hud`.
+- **Icons**: pick a picture for Survivor or any killer.
+
+Everything is saved to the config (`[hud]`, `[icons]`), so it can be edited by
+hand too.
+
 ### Icons
 
-Optional, user-supplied: `assets/icons/killers/<killer>.png` (e.g.
+Two ways, the first wins: pick one in Settings > Icons (stored as a path in
+`[icons]`), or drop files in `assets/icons/killers/<killer>.png` (e.g.
 `The Trapper.png` or just `Trapper.webp`) and `assets/icons/survivor.png`.
-Without them the HUD shows text only. `[hud] scale` resizes it.
+Without either the HUD shows text only.
 
 ### Replay (no game needed)
 
@@ -258,8 +286,32 @@ uv run dbd-overlay replay tests/fixtures/screens \
 ```
 
 Replay runs the same detector as the live app and prints the events it would
-publish. The manifest lists per-file expectations (`map`, `end`, `lobby`); see
+publish. The manifest lists per-file expectations (`map`, `end`, `lobby`,
+`lobby_role`, `lobby_killer`); see
 `detection/replay.py`.
+
+## Discord status (optional)
+
+Shows where you are as your Discord status: menus, lobby / searching, in a
+match (as which killer, or "Survivor"; map; elapsed time) and the result
+afterwards ("Escaped · vs The Pig"). Off by default.
+
+"In a match" starts when you leave a lobby you queued from. The map comes
+from the title card at the start of the match; if the game's workspace wasn't
+on screen then, the map stays blank (fix it with `ctl set-map`), and the
+timer counts from the end of the lobby instead of the real start.
+
+1. Create an application at <https://discord.com/developers/applications>.
+   Its **name** is what Discord shows after "Playing", e.g. "Dead by Daylight".
+2. Settings > Discord: paste its Application ID, switch it on, Save.
+   (Or `[discord] enabled = true` + `client_id = "..."` in the config.)
+3. `dbd-overlay ctl toggle-discord` (or the tray menu) switches it on/off.
+
+Talks to the local Discord app over its IPC socket (`discord-ipc-0`); works
+with the official client and with arRPC (Vesktop). If Discord also lists the
+game by itself, turn that off under Registered Games to avoid two entries.
+Survivor names aren't detected (the lobby doesn't show them), so survivors
+show as "Survivor".
 
 ## Development
 

@@ -77,7 +77,9 @@
   "224831.png": {
     "map": null,
     "end": null,
-    "lobby": true
+    "lobby": true,
+    "lobby_role": "killer",
+    "lobby_killer": "The Slasher"
   },
   "225200.png": {
     "map": {
@@ -141,6 +143,37 @@
   "233233.png": {
     "map": null,
     "end": null,
-    "lobby": true
+    "lobby": true,
+    "lobby_role": "survivor"
+  },
+  "163745.webp": {
+    "lobby": true,
+    "lobby_role": "killer",
+    "lobby_killer": "The Hillbilly",
+    "end": null
+  },
+  "162530.webp": {
+    "lobby": true,
+    "lobby_role": "survivor",
+    "lobby_killer": null,
+    "end": null
+  },
+  "163812.webp": {
+    "lobby": true,
+    "lobby_role": "killer",
+    "lobby_killer": "The Hillbilly",
+    "end": null
+  },
+  "162603.webp": {
+    "lobby": true,
+    "lobby_role": "survivor",
+    "lobby_killer": null,
+    "end": null
+  },
+  "164832.webp": {
+    "lobby": true,
+    "lobby_role": null,
+    "lobby_killer": null,
+    "end": null
   }
 }

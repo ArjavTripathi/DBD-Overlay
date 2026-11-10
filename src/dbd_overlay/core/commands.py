@@ -31,6 +31,7 @@ COMMANDS: dict[str, str] = {
     "set-role": "set your role: `ctl set-role killer` / `ctl set-role survivor`",
     "toggle-hud": "show/hide the streak HUD",
     "edit-hud": "toggle drag/resize mode for overlay and HUD",
+    "toggle-discord": "turn the Discord status (Rich Presence) on/off",
     "settings": "open the settings window (win conditions, HUD)",
     "quit": "exit the app",
 }

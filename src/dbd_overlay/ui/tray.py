@@ -37,6 +37,7 @@ MENU: list[tuple[str, str] | None] = [  # (label, command); None = separator
     ("Pick map…", "pick-map"),
     ("Pick killer…", "pick-killer"),
     ("Edit HUD layout", "edit-hud"),
+    ("Toggle Discord status", "toggle-discord"),
     None,
     ("Record win", "streak-win"),
     ("Record loss", "streak-loss"),

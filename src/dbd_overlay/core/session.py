@@ -4,7 +4,8 @@ Role and your killer are remembered across restarts, so the HUD shows the
 right streak right away.
 
 'my_killer' is the killer YOU play (for per-killer streaks). It's updated by
-the scoreboard only when you were the killer, or by a manual pick, and
+the scoreboard only when you were the killer, by the killer lobby, or by a
+manual pick, and
 remembered across restarts ("last used killer").
 """
 
@@ -66,8 +67,8 @@ class Session:
 
     def _on_killer(self, e: KillerDetected) -> None:
         # Scoreboard KillerDetected may be the OPPONENT's killer; _on_board
-        # decides for those. Manual picks are always yours.
-        if e.source == "manual":
+        # decides for those. Manual picks and the lobby are always yours.
+        if e.source in ("manual", "lobby"):
             self._set_my_killer(e.killer)
 
     def _on_board(self, e: ScoreboardRead) -> None:

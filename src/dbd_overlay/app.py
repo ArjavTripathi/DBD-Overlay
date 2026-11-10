@@ -19,6 +19,7 @@ from .core.events import Event, EventBus
 from .core.session import Session
 from .detection.detector import MatchDetector
 from .detection.service import DetectionService
+from .features.discord_presence import DiscordPresenceFeature
 from .features.killer_select import KillerSelectFeature
 from .features.map_overlay import MapOverlayFeature
 from .features.streaks import StreakFeature
@@ -68,6 +69,7 @@ class App:
         self.tray = Tray(self.router.dispatch)
 
         catalog, killers = load_maps(), load_killers()
+        self.killer_names = [k.name for k in killers]
         self.session = Session(self.bus, paths.state_file())
         self.killer_select = KillerSelectFeature(self.bus, self.router, killers, self.session, self.tray.notify)
 
@@ -109,25 +111,54 @@ class App:
         else:
             self.streaks = StreakFeature(
                 self.bus, self.router, StreakService(self.db, Rules.from_config(self.cfg.streaks)),
-                self.session, hud, Icons(paths.assets_dir(o.assets_dir)),
+                self.session, hud, self._icons(self.cfg),
                 show_mode=h.show, notify=self.tray.notify, save_position=self._save_hud_position,
-                game_visible=self.detection is None,
+                game_visible=self.detection is None, style=h,
             )
         self.router.register("edit-hud", self._cmd_edit)
 
+        # Subscribes after the Session, so it always sees the updated role/killer/map.
+        self.discord = DiscordPresenceFeature(self.bus, self.router, self.session, self.cfg.discord,
+                                              self._save_discord_enabled)
+
         self.settings = SettingsWindow()
         self.settings.saved.connect(self._on_settings_saved)
+        self.settings.preview.connect(self._on_settings_preview)
+        self.settings.closed.connect(self._on_settings_closed)
         self.router.register("settings", self._cmd_settings)
 
+    def _icons(self, cfg: config_mod.Config) -> Icons:
+        return Icons(paths.assets_dir(cfg.overlay.assets_dir), cfg.icons)
+
     def _cmd_settings(self) -> str:
-        self.settings.open(self.cfg.streaks, self.cfg.hud, self.streaks.streak_list() if self.streaks else [])
+        self.settings.open(self.cfg, self.streaks.streak_list() if self.streaks else [], self.killer_names,
+                           self._icons(self.cfg), self.router.dispatch)
         return "settings open"
 
-    def _on_settings_saved(self, streaks, hud_mode: str, history: bool, active: dict) -> None:
-        self.cfg.streaks, self.cfg.hud.show = streaks, hud_mode
-        config_mod.save(self.cfg, self.config_path)
+    def _on_settings_preview(self, hud: config_mod.HudConfig, icons: config_mod.IconsConfig) -> None:
+        if self.streaks is None:
+            return
+        self.streaks.set_look(hud, self._icons(self.cfg).with_overrides(icons))
+        self.streaks.set_preview(self.settings.previewing)
+
+    def _on_settings_closed(self) -> None:
+        """Cancel/close: undo the live preview (after Save, self.cfg is already the new one)."""
         if self.streaks is not None:
-            msg = self.streaks.apply_settings(Rules.from_config(streaks), hud_mode, history, active)
+            self.streaks.set_look(self.cfg.hud, self._icons(self.cfg))
+            self.streaks.set_preview(False)
+
+    def _on_settings_saved(self, new: config_mod.Config, history: bool, active: dict) -> None:
+        # The HUD may have been dragged while the window was open: keep that position.
+        new.hud.x, new.hud.y = self.cfg.hud.x, self.cfg.hud.y
+        self.cfg.streaks, self.cfg.hud, self.cfg.icons = new.streaks, new.hud, new.icons
+        discord_changed = new.discord != self.cfg.discord
+        self.cfg.discord = new.discord
+        config_mod.save(self.cfg, self.config_path)
+        if discord_changed:
+            self.tray.notify("Discord", self.discord.apply(new.discord))
+        if self.streaks is not None:
+            msg = self.streaks.apply_settings(Rules.from_config(new.streaks), new.hud.show, history, active)
+            self.streaks.set_look(self.cfg.hud, self._icons(self.cfg))
             self.tray.notify("Settings", msg)
 
     def _cmd_edit(self) -> str:
@@ -139,6 +170,10 @@ class App:
         for f in parts:
             f.set_editing(editing)
         return "editing" if editing else "locked"
+
+    def _save_discord_enabled(self, enabled: bool) -> None:
+        self.cfg.discord.enabled = enabled
+        config_mod.save(self.cfg, self.config_path)
 
     def _save_hud_position(self, pos: tuple[int, int]) -> None:
         self.cfg.hud.x, self.cfg.hud.y = pos
@@ -178,6 +213,7 @@ class App:
         finally:
             if self.detection:
                 self.detection.stop()
+            self.discord.stop()  # clears the status
             self.control.stop()
             self.db.close()
             log.info("stopped")

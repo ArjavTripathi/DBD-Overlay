@@ -120,7 +120,7 @@ def _red_mask(crop: np.ndarray) -> np.ndarray:
     return (r > 150) & (g < 80) & (b < 80)
 
 
-def _grey_text(crop: np.ndarray, height: int, max_saturation: int = 70) -> np.ndarray:
+def grey_text(crop: np.ndarray, height: int, max_saturation: int = 70) -> np.ndarray:
     """Light, neutral-coloured text (white names AND dimmer grey player names).
 
     Like text.isolate_text but with a fixed threshold: Otsu would split the
@@ -148,7 +148,7 @@ class EndScreenReader:
         crop = TITLE.crop(frame)
         # Structural check: every end screen has a small white 'MATCH' label
         # above the red title. Red auras and painted walls don't.
-        label = norm(pytesseract.image_to_string(_grey_text(crop, frame.shape[0], 60), config="--psm 6"))
+        label = norm(pytesseract.image_to_string(grey_text(crop, frame.shape[0], 60), config="--psm 6"))
         if "MATCH" not in label.split():
             return EndReading()
         mask = cv2.resize(_red_mask(crop).astype(np.uint8) * 255, None, fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
@@ -168,8 +168,8 @@ class EndScreenReader:
 
     def read_scoreboard(self, frame: np.ndarray) -> ScoreboardReading:
         h = frame.shape[0]
-        own = strip_edge_junk(norm(ocr_line(_grey_text(OWN_NAME.crop(frame), h))))
-        rows = tuple(norm(ocr_line(_grey_text(row_roi(i).crop(frame), h))) for i in range(ROW_COUNT))
+        own = strip_edge_junk(norm(ocr_line(grey_text(OWN_NAME.crop(frame), h))))
+        rows = tuple(norm(ocr_line(grey_text(row_roi(i).crop(frame), h))) for i in range(ROW_COUNT))
 
         killer, killer_row, best = None, None, 0.0
         for i, text in enumerate(rows):
@@ -189,19 +189,3 @@ class EndScreenReader:
         survivor_rows = [i for i in range(ROW_COUNT) if i != (killer_row if killer_row is not None else ROW_COUNT - 1)]
         statuses = tuple(classify(icon_roi(ROW_FIRST_Y + i * ROW_PITCH).crop(frame))[0] for i in survivor_rows)
         return ScoreboardReading(rows, own, killer, killer_row, my_row, statuses)
-
-
-# -- lobby -------------------------------------------------------------------
-
-# Only the label part of the button: the claw logo on its right confuses Tesseract.
-LOBBY_BUTTON = Roi(0.30, 0.87, 0.49, 0.94, anchor="right")
-LOBBY_WORDS = ("PLAY", "READY", "UNREADY", "CANCEL")
-
-
-def lobby_button_visible(frame: np.ndarray) -> bool:
-    """The big PLAY / READY / CANCEL button bottom-right exists only in lobbies.
-    (Scoreboard says CONTINUE, the in-match menu says QUIT.)"""
-    h = frame.shape[0]
-    words = norm(ocr_line(_grey_text(LOBBY_BUTTON.crop(frame), h, max_saturation=90))).split()
-    # Allow a couple of junk letters glued on ('PLAYL').
-    return any(w.startswith(lw) and len(w) <= len(lw) + 2 for w in words for lw in LOBBY_WORDS)

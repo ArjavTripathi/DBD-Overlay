@@ -111,9 +111,11 @@ class DetectionService:
         if state != self._window_state:
             log.info("game window: %s%s", state, f" ({win.width}x{win.height})" if win else "")
             was_visible = self._window_state == "visible"
+            old = self._window_state
             self._window_state = state
-            if (state == "visible") != was_visible or self._first_report:
-                self.bus.publish(GameWindowChanged(state == "visible"))
+            # Report visibility changes, and game start/exit (hidden <-> missing) too.
+            if (state == "visible") != was_visible or self._first_report or "missing" in (state, old):
+                self.bus.publish(GameWindowChanged(state == "visible", running=state != "missing"))
             self._first_report = False
 
     def _log_and_debug(self, frame: np.ndarray, r: TickResult) -> None:

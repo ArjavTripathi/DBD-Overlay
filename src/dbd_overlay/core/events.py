@@ -32,6 +32,7 @@ class GameWindowChanged(Event):
     """The game window appeared/disappeared or its workspace was (un)shown."""
 
     visible: bool
+    running: bool = True  # False = no game window at all (game closed)
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,18 @@ class MatchStarted(Event):
 @dataclass(frozen=True)
 class MatchEnded(Event):
     """Left the trial (scoreboard or back to lobby)."""
+
+
+@dataclass(frozen=True)
+class LobbyChanged(Event):
+    """The lobby appeared, disappeared, or its big button changed.
+
+    button: PLAY / READY / UNREADY / CANCEL. When hidden, it's the LAST button
+    seen, so 'hidden after READY' means loading into a match, 'after PLAY' menus.
+    """
+
+    visible: bool
+    button: str | None = None
 
 
 @dataclass(frozen=True)

@@ -165,5 +165,16 @@ class HudWindow(QmlWindow):
                             ("prompt", prompt), ("active", active), ("iconSource", self.image_url("icon", icon))):
             self.set(name, value)
 
+    def set_style(self, hud) -> None:
+        """Apply the look from a HudConfig (position is left alone)."""
+        for name, value in (
+            ("contentOpacity", hud.opacity), ("uiScale", hud.scale), ("compact", hud.layout == "compact"),
+            ("showIcon", hud.show_icon), ("showTitle", hud.show_title), ("showAttempt", hud.show_attempt),
+            ("showBest", hud.show_best), ("iconSize", hud.icon_size), ("accent", hud.accent),
+            ("textColor", hud.text_color), ("bgColor", hud.background), ("bgOpacity", hud.background_opacity),
+            ("showBorder", hud.border), ("cornerRadius", hud.corner_radius), ("fontFamily", hud.font),
+        ):
+            self.set(name, value)
+
     def position(self) -> tuple[int, int]:
         return int(self.root.property("posX")), int(self.root.property("posY"))

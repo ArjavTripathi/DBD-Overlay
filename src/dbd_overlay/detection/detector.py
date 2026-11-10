@@ -12,16 +12,22 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from ..core.catalog import MapCatalog
-from ..core.events import Event, MatchStarted
+from ..core.events import Event, KillerDetected, MatchStarted, RoleDetected
 from ..core.models import Killer
 from . import egc
-from .end_screen import LOBBY_BUTTON, TITLE, EndReading, EndScreenReader, lobby_button_visible
+from .end_screen import TITLE, EndReading, EndScreenReader
+from .lobby import (HEADER, LOBBY_BUTTON, SUBTITLE, LobbyReader, LobbyReading, LobbyRoleTracker,
+                    LobbyVisibilityTracker)
 from .map_detector import CardReading, TitleCardReader, TitleCardTracker
 from .match_tracker import MatchTracker, Observation, Phase
 from .roi import Roi
 
-# Lobby OCR (~70 ms) only matters for matches that end without end screens.
-LOBBY_CHECK_SECONDS = 10.0
+# Lobby OCR (~30 ms for the button; the rest only when it's there).
+# Between matches it tells killer from survivor, so check often; during a
+# match it only catches matches that end without end screens.
+LOBBY_CHECK_SECONDS = 4.0
+LOBBY_CHECK_SECONDS_IN_MATCH = 10.0
+LOBBY_ROIS = (LOBBY_BUTTON, SUBTITLE, HEADER)
 
 
 @dataclass
@@ -30,6 +36,7 @@ class TickResult:
     card: CardReading = field(default_factory=CardReading)
     end: EndReading | None = None
     lobby: bool | None = None
+    lobby_reading: LobbyReading | None = None
     egc: bool | None = None
 
 
@@ -42,6 +49,9 @@ class MatchDetector:
         self.card_tracker = TitleCardTracker()
         self.ends = EndScreenReader(killers)
         self.tracker = MatchTracker()
+        self.lobbies = LobbyReader(killers)
+        self.lobby_roles = LobbyRoleTracker()
+        self.lobby_seen = LobbyVisibilityTracker()
         self._end_visible = False
         self._last_lobby_check = float("-inf")
 
@@ -59,8 +69,9 @@ class MatchDetector:
             rois.append(TitleCardReader.CAPTURE)
         if self.tracker.phase is Phase.MATCH:
             rois.append(egc.CAPTURE)
-        if self.tracker.phase is not Phase.IDLE and now - self._last_lobby_check >= LOBBY_CHECK_SECONDS:
-            rois.append(LOBBY_BUTTON)
+        every = LOBBY_CHECK_SECONDS_IN_MATCH if self.tracker.phase is Phase.MATCH else LOBBY_CHECK_SECONDS
+        if now - self._last_lobby_check >= every:
+            rois.extend(LOBBY_ROIS)
         return rois
 
     def process(self, frame: np.ndarray, now: float, captured: list[Roi] | None = None) -> TickResult:
@@ -77,7 +88,15 @@ class MatchDetector:
 
         if full or LOBBY_BUTTON in captured:
             self._last_lobby_check = now
-            r.lobby = lobby_button_visible(frame)
+            r.lobby_reading = self.lobbies.read(frame)
+            r.lobby = r.lobby_reading.visible
+            role, killer = self.lobby_roles.update(r.lobby_reading)
+            if killer:  # killer first, so the role change already has it
+                r.events.append(KillerDetected(killer, 1.0, source="lobby"))
+            if role:
+                r.events.append(RoleDetected(role, source="lobby"))
+            if (changed := self.lobby_seen.update(r.lobby_reading)) is not None:
+                r.events.append(changed)
 
         if full or egc.CAPTURE in captured:
             r.egc = egc.egc_visible(frame)

@@ -17,6 +17,7 @@ from collections.abc import Callable
 from PySide6.QtCore import QObject, QSize
 
 from ...core.commands import CommandRouter
+from ...core.config import HudConfig
 from ...core.events import (
     EventBus,
     GameWindowChanged,
@@ -53,10 +54,13 @@ class StreakFeature(QObject):
         notify: Callable[[str, str], None],
         save_position: Callable[[tuple[int, int]], None],
         game_visible: bool = False,
+        style: HudConfig | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
         self.bus, self.svc, self.session, self.hud, self.icons = bus, service, session, hud, icons
+        self.style = style or HudConfig()
+        hud.set_style(self.style)
         self.notify, self.save_position = notify, save_position
         self.state = HudState(mode=show_mode, game_visible=game_visible)
         hud.edit_done.connect(lambda: self.set_editing(False))
@@ -97,12 +101,33 @@ class StreakFeature(QObject):
                 known.append((cat, self.svc.is_active(cat), self.svc.stats(cat)))
         return sorted(known, key=lambda t: (t[0] != SURVIVOR_CATEGORY, t[0]))
 
+    def set_look(self, style: HudConfig, icons: Icons | None = None) -> None:
+        """HUD look and icons; used for the live preview and on save."""
+        self.style = style
+        if icons is not None:
+            self.icons = icons
+        self.hud.set_style(style)
+        self.refresh()
+
+    def set_preview(self, on: bool) -> None:
+        self.state.previewing = on
+        self._apply()
+
     def apply_settings(self, rules, show_mode: str, history: bool, active: dict[str, bool]) -> str:
         """New win rules, HUD mode and streak on/off take effect immediately."""
         self.svc.rules = rules
         self.state.mode = show_mode
+        newly_on = [c for c, on in active.items() if on and not self.svc.is_active(c)]
         for cat, on in active.items():
             self.svc.set_active(cat, on)
+        # Show the streak you just switched on. Or, if the one shown is off and
+        # exactly one streak is on, show that one.
+        on_now = [c for c, on in active.items() if on]
+        target = newly_on[0] if newly_on else None
+        if target is None and self._category() not in on_now and len(on_now) == 1:
+            target = on_now[0]
+        if target is not None:
+            self.focus(target)
         msg = "saved"
         if history:
             msg += f"; {self.svc.recompute_all()} past matches re-judged (streak-undo reverts)"
@@ -146,6 +171,14 @@ class StreakFeature(QObject):
     def _changed(self, msg: str) -> str:
         self.bus.publish(ResultsChanged())  # refresh() runs via the subscription
         return msg
+
+    def focus(self, category: str) -> None:
+        """Make `category` the current streak (HUD, hotkeys) by setting role/killer."""
+        if category == SURVIVOR_CATEGORY:
+            self.bus.publish(RoleDetected(Role.SURVIVOR, source="manual"))
+        else:
+            self.bus.publish(KillerDetected(category.removeprefix("killer:"), 1.0, source="manual"))
+            self.bus.publish(RoleDetected(Role.KILLER, source="manual"))
 
     def _cmd_toggle_streak(self) -> str:
         cat = self._category()
@@ -196,10 +229,11 @@ class StreakFeature(QObject):
             return
         st = self.svc.stats(cat)
         if cat == SURVIVOR_CATEGORY:
-            title, icon_path = "Survivor Streak", self.icons.survivor()
+            title, icon_path = self.style.survivor_title, self.icons.survivor()
         else:
             killer = cat.removeprefix("killer:")
-            title, icon_path = f"Killer Streak: {killer.removeprefix('The ')}", self.icons.killer(killer)
+            title = self.style.killer_title.replace("{killer}", killer.removeprefix("The "))
+            icon_path = self.icons.killer(killer)
         active = self.svc.is_active(cat)
         last = self.svc.last_match()
         waiting = (last is not None and last.category == cat and last.counted and not last.ignored

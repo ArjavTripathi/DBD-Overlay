@@ -19,6 +19,7 @@ class HudState:
     between_matches: bool = True   # app usually starts in the lobby
     forced: bool | None = None     # toggle-hud override
     editing: bool = False
+    previewing: bool = False       # Settings > HUD is open: show it to preview changes
 
     @property
     def base(self) -> bool:
@@ -26,7 +27,7 @@ class HudState:
 
     @property
     def shown(self) -> bool:
-        if self.editing:
+        if self.editing or self.previewing:
             return True
         return self.game_visible and (self.forced if self.forced is not None else self.base)
 
