@@ -65,6 +65,10 @@ class ImageStore(QQuickImageProvider):
     def put(self, key: str, image: QImage) -> None:
         self._images[key] = image
 
+    def discard(self, key: str | None) -> None:
+        if key is not None:
+            self._images.pop(key, None)
+
     def requestImage(self, id: str, size: QSize, requested: QSize) -> QImage:  # noqa: N802 (Qt API)
         return self._images.get(id, QImage())
 
@@ -79,38 +83,44 @@ def create_engine(variant: str) -> tuple[QQmlEngine, ImageStore]:
     return engine, store
 
 
-class OverlayWindow(QObject):
-    """Python handle for qml/OverlayWindow.qml."""
+class QmlWindow(QObject):
+    """Python handle for one of our QML windows (overlay, HUD).
+
+    Python sets properties on the QML root; QML emits editDone when the user
+    presses Esc in edit mode.
+    """
 
     edit_done = Signal()
 
-    def __init__(self, engine: QQmlEngine, store: ImageStore, geometry: tuple[int, int, int, int], opacity: float) -> None:
+    def __init__(self, engine: QQmlEngine, store: ImageStore, qml_file: str, props: dict) -> None:
         super().__init__()
         self._store = store
         self._image_rev = 0
+        self._keys: dict[str, str] = {}  # prefix -> current key (older images are freed)
         # Keep the component alive as long as the window.
-        self._component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / "OverlayWindow.qml")))
-        x, y, w, h = geometry
-        self.root = self._component.createWithInitialProperties(
-            {"posX": x, "posY": y, "width": w, "height": h, "contentOpacity": opacity, "visible": False}
-        )
+        self._component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / qml_file)))
+        self.root = self._component.createWithInitialProperties({**props, "visible": False})
         if self.root is None:
             errors = "; ".join(e.toString() for e in self._component.errors())
-            raise RuntimeError(f"overlay QML failed: {errors} (on Linux: pacman -S layer-shell-qt)")
+            raise RuntimeError(f"{qml_file} failed: {errors} (on Linux: pacman -S layer-shell-qt)")
         # Objects created from QML default to JavaScript ownership, so the QML
         # garbage collector may delete them at any time. We own this one.
         QQmlEngine.setObjectOwnership(self.root, QQmlEngine.ObjectOwnership.CppOwnership)
         self.root.editDone.connect(self.edit_done)
 
-    def set_image(self, image: QImage | None) -> None:
+    def set(self, name: str, value) -> None:
+        self.root.setProperty(name, value)
+
+    def image_url(self, prefix: str, image: QImage | None) -> str:
+        """Register an image with the provider; '' for none. New key each time: QML caches by URL."""
+        self._store.discard(self._keys.pop(prefix, None))
         if image is None:
-            self.root.setProperty("imageSource", "")
-            return
-        # A new key each time: QML caches by URL.
+            return ""
         self._image_rev += 1
-        key = f"map-{self._image_rev}"
+        key = f"{prefix}-{id(self)}-{self._image_rev}"
         self._store.put(key, image)
-        self.root.setProperty("imageSource", f"image://img/{key}")
+        self._keys[prefix] = key
+        return f"image://img/{key}"
 
     def set_shown(self, shown: bool) -> None:
         if bool(self.root.property("visible")) != shown:
@@ -119,12 +129,41 @@ class OverlayWindow(QObject):
     def set_edit_mode(self, editing: bool) -> None:
         self.root.setProperty("editMode", editing)
 
-    def set_placeholder(self, text: str) -> None:
-        self.root.setProperty("placeholder", text)
-
     def geometry(self) -> tuple[int, int, int, int]:
         r = self.root
         return int(r.property("posX")), int(r.property("posY")), int(r.property("width")), int(r.property("height"))
 
+
+class OverlayWindow(QmlWindow):
+    """qml/OverlayWindow.qml: the map image."""
+
+    def __init__(self, engine: QQmlEngine, store: ImageStore, geometry: tuple[int, int, int, int], opacity: float) -> None:
+        x, y, w, h = geometry
+        super().__init__(engine, store, "OverlayWindow.qml",
+                         {"posX": x, "posY": y, "width": w, "height": h, "contentOpacity": opacity})
+
+    def set_image(self, image: QImage | None) -> None:
+        self.set("imageSource", self.image_url("map", image))
+
+    def set_placeholder(self, text: str) -> None:
+        self.set("placeholder", text)
+
     def size(self) -> QSize:
         return QSize(int(self.root.property("width")), int(self.root.property("height")))
+
+
+class HudWindow(QmlWindow):
+    """qml/HudWindow.qml: the streak card (sizes itself to its content)."""
+
+    def __init__(self, engine: QQmlEngine, store: ImageStore, pos: tuple[int, int], opacity: float, scale: float) -> None:
+        super().__init__(engine, store, "HudWindow.qml",
+                         {"posX": pos[0], "posY": pos[1], "contentOpacity": opacity, "uiScale": scale})
+
+    def show_stats(self, title: str, current: int, attempt: int, best: int, prompt: str,
+                   icon: QImage | None, active: bool = True) -> None:
+        for name, value in (("title", title), ("current", current), ("attempt", attempt), ("best", best),
+                            ("prompt", prompt), ("active", active), ("iconSource", self.image_url("icon", icon))):
+            self.set(name, value)
+
+    def position(self) -> tuple[int, int]:
+        return int(self.root.property("posX")), int(self.root.property("posY"))

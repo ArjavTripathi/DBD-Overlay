@@ -83,3 +83,17 @@ def isolate_text(crop: np.ndarray, max_saturation: int | None = None, kernel: in
     th = cv2.resize(th, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
     bw = cv2.threshold(th, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
     return 255 - bw
+
+
+def isolate_desaturated_text(crop: np.ndarray, kernel: int = 15) -> np.ndarray:
+    """Semi-transparent grey text over a saturated background (the realm line
+    over Trickster's red walls): not brighter than its surroundings, but less
+    saturated. Combines 'brighter + neutral' with 'less saturated than nearby'."""
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    sat = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)[..., 1]
+    k = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel, kernel))
+    bright = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, k)
+    bright[sat > 50] = 0
+    desat = cv2.morphologyEx(sat, cv2.MORPH_BLACKHAT, k)  # dips in saturation
+    score = cv2.resize(np.maximum(bright, desat), None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+    return 255 - cv2.threshold(score, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]

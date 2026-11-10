@@ -22,7 +22,7 @@ import numpy as np
 from ..core.catalog import MapCatalog
 from ..core.events import Event, MapDetected, MatchStarted
 from .roi import Roi
-from .text import best_match, isolate_text, ocr_line
+from .text import best_match, isolate_desaturated_text, isolate_text, ocr_line
 
 log = logging.getLogger(__name__)
 
@@ -131,8 +131,21 @@ class TitleCardReader:
         realm_roi = Roi(TEXT_X[0], y_rel + REALM_BELOW[0], TEXT_X[1], y_rel + REALM_BELOW[1])
         kernel = max(5, round(0.0105 * h) | 1)  # odd, > stroke width, scales with resolution
         map_text = ocr_line(isolate_text(map_roi.crop(frame), kernel=kernel))
-        realm_text = ocr_line(isolate_text(realm_roi.crop(frame), REALM_MAX_SATURATION, kernel))
-        match = resolve(map_text, realm_text, self.catalog)
+        # The realm line is semi-transparent: no single filter works on every
+        # background (swamp grass vs. Trickster's red walls). Try both, keep
+        # whichever resolves better.
+        realm_crop = realm_roi.crop(frame)
+        best: tuple[tuple[bool, float], str, MapMatch | None] | None = None
+        for realm_img in (isolate_text(realm_crop, REALM_MAX_SATURATION, kernel),
+                          isolate_desaturated_text(realm_crop, kernel)):
+            realm_text = ocr_line(realm_img)
+            m = resolve(map_text, realm_text, self.catalog)
+            rank = _rank(m) if m else (False, 0.0)
+            if best is None or rank > best[0]:
+                best = (rank, realm_text, m)
+            if m is not None and m.confidence >= 1.0:
+                break  # perfect already: skip the second OCR
+        _, realm_text, match = best
         return CardReading(y, teal, map_text, realm_text, match)
 
 

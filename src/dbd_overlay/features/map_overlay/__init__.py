@@ -2,7 +2,7 @@
 
 Listens to: MapDetected (show, or ask via picker), MatchEnded (hide),
 GameWindowChanged (hide while the user is on another workspace).
-Commands: toggle-overlay, pick-map, edit-hud.
+Commands: toggle-overlay, pick-map, set-map. (edit-hud is coordinated by the app.)
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from ...core.events import EventBus, GameWindowChanged, MapDetected, MatchEnded
 from ...core.models import Map
 from ...detection.text import best_match
 from ...ui.overlay import OverlayWindow, load_image
-from ...ui.picker import MapPicker
+from ...ui.picker import ListPicker
 from ...ui.qt_bridge import on_main_thread
 from .assets import MapImages
 from .state import OverlayState
@@ -51,9 +51,9 @@ class MapOverlayFeature(QObject):
         self.state = OverlayState(game_visible=game_visible)
         self.current: Map | None = None
 
-        self.picker = MapPicker(catalog)
+        self.picker = ListPicker("DBD Overlay: pick map")
         self.picker.picked.connect(self._on_picked)
-        window.edit_done.connect(lambda: self._set_editing(False))
+        window.edit_done.connect(lambda: self.set_editing(False))
 
         on_main_thread(bus, MapDetected, self._on_map, self)
         on_main_thread(bus, MatchEnded, self._on_match_ended, self)
@@ -61,7 +61,6 @@ class MapOverlayFeature(QObject):
         router.register("pick-map", self._cmd_pick_map)
         router.register("set-map", self._cmd_set_map, takes_arg=True)
         router.register("toggle-overlay", self._cmd_toggle)
-        router.register("edit-hud", self._cmd_edit)
 
         missing, _ = self.images.report()
         log.info("map images: %d of %d found in %s", len(catalog.maps) - len(missing), len(catalog.maps), assets_dir)
@@ -72,7 +71,7 @@ class MapOverlayFeature(QObject):
         if e.map is None:
             # Unsure: ask. Realm known -> short list; nothing known -> full list.
             log.info("map unclear (realm=%s); opening picker", e.realm)
-            self.picker.open_for(e.realm)
+            self._open_picker(e.realm)
             return
         self.picker.hide()
         self.current = self.catalog.find_map(e.map)
@@ -93,15 +92,22 @@ class MapOverlayFeature(QObject):
         self.state.game_visible = e.visible
         self._apply()
 
-    def _on_picked(self, realm: str, name: str) -> None:
-        self.bus.publish(MapDetected(realm, name, 1.0, source="manual"))
+    def _on_picked(self, m: Map) -> None:
+        self.bus.publish(MapDetected(m.realm, m.name, 1.0, source="manual"))
+
+    def _open_picker(self, realm: str | None) -> None:
+        r = self.catalog.realm(realm) if realm else None
+        maps = r.maps if r else self.catalog.maps
+        header = f"Detected realm: <b>{r.name}</b>, which map?" if r else "Which map?"
+        items = [(f"{m.name}  —  {m.realm}", m) for m in sorted(maps, key=lambda m: (m.realm, m.name))]
+        self.picker.open(header, items)
 
     # -- commands ----------------------------------------------------------
 
     def _cmd_pick_map(self) -> str:
         # Always the full list: if detection got the realm wrong, a realm-only
         # list wouldn't contain the right answer.
-        self.picker.open_for(None)
+        self._open_picker(None)
         return "picker open"
 
     def _cmd_set_map(self, text: str) -> str:
@@ -118,13 +124,13 @@ class MapOverlayFeature(QObject):
         self._apply()
         return "shown" if self.state.wanted else "hidden"
 
-    def _cmd_edit(self) -> str:
-        self._set_editing(not self.state.editing)
-        return "editing" if self.state.editing else "locked"
-
     # -- helpers -----------------------------------------------------------
 
-    def _set_editing(self, editing: bool) -> None:
+    @property
+    def editing(self) -> bool:
+        return self.state.editing
+
+    def set_editing(self, editing: bool) -> None:
         if editing == self.state.editing:
             return
         self.state.editing = editing

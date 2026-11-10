@@ -1,31 +1,31 @@
-"""Small searchable list to pick a map when detection isn't sure.
+"""Small searchable list for 'detection wasn't sure, please pick'.
 
-Type to filter, Enter/double-click to choose, Esc to close. If the realm was
-detected, only that realm's maps are listed (usually 2-5 entries).
+Type to filter, Enter/double-click to choose, Esc to close. Used for maps
+and killers.
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QLabel, QLineEdit, QListWidget, QListWidgetItem, QVBoxLayout, QWidget
 
-from ..core.catalog import MapCatalog
 from ..detection.text import norm
 
 ROLE = Qt.ItemDataRole.UserRole
 
 
-class MapPicker(QWidget):
-    picked = Signal(str, str)  # realm, map
+class ListPicker(QWidget):
+    picked = Signal(object)  # the payload of the chosen item
 
-    def __init__(self, catalog: MapCatalog) -> None:
+    def __init__(self, title: str) -> None:
         super().__init__(None, Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
-        self.catalog = catalog
-        self.setWindowTitle("DBD Overlay: pick map")
+        self.setWindowTitle(title)
         self.resize(420, 480)
 
-        self.header = QLabel()
+        self.header = QLabel(wordWrap=True)
         self.search = QLineEdit(placeholderText="Type to filter…")
         self.list = QListWidget()
         layout = QVBoxLayout(self)
@@ -36,17 +36,18 @@ class MapPicker(QWidget):
         self.search.returnPressed.connect(self._choose)
         self.list.itemActivated.connect(lambda _: self._choose())
 
-    def open_for(self, realm: str | None) -> None:
-        r = self.catalog.realm(realm) if realm else None
-        maps = r.maps if r else self.catalog.maps
-        self.header.setText(f"Detected realm: <b>{r.name}</b>, which map?" if r else "Which map?")
+    def open(self, header: str, items: list[tuple[str, Any]], selected: Any = None) -> None:
+        self.header.setText(header)
         self.list.clear()
-        for m in sorted(maps, key=lambda m: (m.realm, m.name)):
-            item = QListWidgetItem(f"{m.name}  —  {m.realm}")
-            item.setData(ROLE, (m.realm, m.name))
+        current = 0
+        for i, (label, payload) in enumerate(items):
+            item = QListWidgetItem(label)
+            item.setData(ROLE, payload)
             self.list.addItem(item)
+            if payload == selected:
+                current = i
         self.search.clear()
-        self.list.setCurrentRow(0)
+        self.list.setCurrentRow(current)
         self.show()
         self.raise_()
         self.activateWindow()
@@ -68,9 +69,8 @@ class MapPicker(QWidget):
         item = self.list.currentItem()
         if item is None or item.isHidden():
             return
-        realm, name = item.data(ROLE)
         self.hide()
-        self.picked.emit(realm, name)
+        self.picked.emit(item.data(ROLE))
 
     def keyPressEvent(self, e: QKeyEvent) -> None:
         if e.key() == Qt.Key.Key_Escape:

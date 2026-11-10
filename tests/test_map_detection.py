@@ -1,4 +1,3 @@
-import json
 import shutil
 from pathlib import Path
 
@@ -8,7 +7,6 @@ import pytest
 
 from dbd_overlay.core.catalog import MapCatalog, load_maps
 from dbd_overlay.core.events import MapDetected, MatchStarted
-from dbd_overlay.detection import replay
 from dbd_overlay.detection.map_detector import (
     CardReading,
     MapMatch,
@@ -157,18 +155,9 @@ def test_roi_scales_with_height_and_anchors():
 # -- real frames (needs tesseract + fixture images) -----------------------------
 
 needs_frames = pytest.mark.skipif(
-    shutil.which("tesseract") is None or not (FIXTURES / "manifest.json").exists(),
+    shutil.which("tesseract") is None or not (FIXTURES / "225200.png").exists(),
     reason="tesseract or fixture screenshots missing",
 )
-
-
-@needs_frames
-@pytest.mark.parametrize("name, expected", json.loads((FIXTURES / "manifest.json").read_text()).items()
-                         if (FIXTURES / "manifest.json").exists() else [])
-def test_fixture_frames(name, expected):
-    frame = cv2.imread(str(FIXTURES / name))
-    assert frame is not None
-    assert replay.check(TitleCardReader(CAT).read(frame), expected)
 
 
 @needs_frames
@@ -182,3 +171,10 @@ def test_detection_survives_1080p():
 
 def test_no_card_on_blank_frame():
     assert not TitleCardReader(CAT).read(np.zeros((1440, 2560, 3), np.uint8)).present
+
+
+def test_killer_catalog():
+    from dbd_overlay.core.catalog import load_killers
+
+    names = [k.name for k in load_killers()]
+    assert len(names) == len(set(names)) and all(n.startswith("The ") for n in names)

@@ -34,6 +34,10 @@ def db_file() -> Path:
     return data_dir() / "matches.db"
 
 
+def state_file() -> Path:
+    return data_dir() / "state.json"
+
+
 def log_file() -> Path:
     return data_dir() / "dbd-overlay.log"
 

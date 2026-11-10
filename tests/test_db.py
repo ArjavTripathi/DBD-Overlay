@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from dbd_overlay.core.models import ManualOutcome, MatchResult, Role, SurvivorOutcome as S
+from dbd_overlay.core.models import ManualOutcome, MatchResult, Role, SurvivorOutcome as S, Verdict
 from dbd_overlay.storage import db as db_mod
 from dbd_overlay.storage.db import Database
 
@@ -81,7 +81,7 @@ def test_failed_migration_rolls_back(tmp_path, monkeypatch):
     with pytest.raises(sqlite3.Error):
         Database(path)
     conn = sqlite3.connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(db_mod.MIGRATIONS) - 1
     assert conn.execute("SELECT name FROM sqlite_master WHERE name='half'").fetchone() is None
 
 
@@ -90,3 +90,62 @@ def test_refuses_newer_database(tmp_path):
     sqlite3.connect(path).execute("PRAGMA user_version = 99")
     with pytest.raises(RuntimeError, match="upgrade the app"):
         Database(path)
+
+
+def test_v1_database_upgrades_keeping_rows(tmp_path, monkeypatch):
+    """A database created by M2-M5 (v1) gains the verdict column; old rows default to unknown."""
+    path = tmp_path / "m.db"
+    monkeypatch.setattr(db_mod, "MIGRATIONS", db_mod.MIGRATIONS[:1])
+    old = Database(path)
+    old.conn.execute(
+        "INSERT INTO matches (ts, role, killer, source, category) "
+        "VALUES ('2026-11-01T00:00:00+00:00', 'killer', 'The Hag', 'manual', 'killer:The Hag')")
+    old.conn.commit()
+    old.close()
+    monkeypatch.undo()
+    d = Database(path)
+    (m,) = d.matches()
+    assert m.verdict is Verdict.UNKNOWN and m.category == "killer:The Hag"
+
+
+def test_set_verdict_and_reset_undo():
+    d = Database(":memory:")
+    mid = d.add_match(killer_match())
+    d.set_verdict(mid, Verdict.WIN, ManualOutcome.WIN)
+    m = d.get_match(mid)
+    assert m.verdict is Verdict.WIN and m.manual_outcome is ManualOutcome.WIN
+    d.add_reset("survivor", T0)
+    d.add_reset("survivor", T0 + timedelta(hours=1))
+    d.delete_last_reset("survivor")
+    assert d.last_reset("survivor") == T0
+
+
+def test_export_import_roundtrip(tmp_path):
+    from dbd_overlay.storage.export import export, import_json
+
+    src = Database(":memory:")
+    src.add_match(killer_match(notes="a"))
+    src.add_match(MatchResult(role=Role.SURVIVOR, manual_outcome=ManualOutcome.WIN, source="manual",
+                              verdict=Verdict.WIN, ts=T0 + timedelta(minutes=5)))
+    assert export(src, tmp_path / "x.json") == 2
+    assert export(src, tmp_path / "x.csv") == 2
+    assert (tmp_path / "x.csv").read_text().count("\n") == 3
+    dst = Database(":memory:")
+    assert import_json(dst, tmp_path / "x.json") == (2, 0)
+    assert import_json(dst, tmp_path / "x.json") == (0, 2)  # no duplicates
+    a, b = src.matches(), dst.matches()
+    assert [(m.category, m.verdict, m.survivors, m.notes) for m in a] == [(m.category, m.verdict, m.survivors, m.notes) for m in b]
+
+
+def test_v3_upgrade_keeps_existing_streaks_on(tmp_path, monkeypatch):
+    path = tmp_path / "m.db"
+    monkeypatch.setattr(db_mod, "MIGRATIONS", db_mod.MIGRATIONS[:2])
+    old = Database(path)
+    old.conn.execute("INSERT INTO matches (ts, role, killer, source, category, verdict) VALUES "
+                     "('2026-11-01T00:00:00+00:00', 'killer', 'The Trapper', 'manual', 'killer:The Trapper', 'win')")
+    old.conn.commit()
+    old.close()
+    monkeypatch.undo()
+    d = Database(path)
+    assert d.streak_active("killer:The Trapper") and d.matches()[0].counted   # was tracked: stays on
+    assert not d.streak_active("killer:The Nurse")                            # new: off

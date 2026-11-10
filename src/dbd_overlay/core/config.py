@@ -55,17 +55,24 @@ class OverlayConfig:
 
 @dataclass
 class HudConfig:
-    show: str = "match_end"
-    opacity: float = 0.8
+    show: str = "match_end"  # always | match_end (until the next match starts) | hotkey
+    opacity: float = 0.85
+    scale: float = 1.0
     x: int = 40
     y: int = 700
 
 
 @dataclass
 class StreakConfig:
+    # Presets: 4k | 3k_hatch | 3k_any | custom   and   i_escape | 3_out | 4_out | custom
     killer_preset: str = "3k_hatch"
     survivor_preset: str = "i_escape"
     dc_counts_as_kill: bool = True
+    # Used when a preset is "custom".
+    custom_killer_required: int = 4          # survivors that must be killed/sacrificed/removed
+    custom_killer_count_hatch: bool = False  # a hatch escape counts as removed
+    custom_survivor_self_escape: bool = True # you must escape yourself
+    custom_survivor_min_escapes: int = 1     # survivors out in total (incl. you)
 
 
 @dataclass
@@ -125,6 +132,9 @@ def validate(cfg: Config) -> None:
     _check_choice("hud.show", cfg.hud.show, HUD_SHOW)
     _check_choice("streaks.killer_preset", cfg.streaks.killer_preset, KILLER_PRESETS)
     _check_choice("streaks.survivor_preset", cfg.streaks.survivor_preset, SURVIVOR_PRESETS)
+    _check_range("streaks.custom_killer_required", cfg.streaks.custom_killer_required, 0, 4)
+    _check_range("streaks.custom_survivor_min_escapes", cfg.streaks.custom_survivor_min_escapes, 0, 4)
+    _check_range("hud.scale", cfg.hud.scale, 0.5, 3)
 
 
 def from_dict(data: dict[str, Any]) -> Config:

@@ -13,15 +13,22 @@ from PySide6.QtWidgets import QApplication
 from . import platform
 from .core import config as config_mod
 from .core import paths
-from .core.catalog import load_maps
+from .core.catalog import load_killers, load_maps
 from .core.commands import CommandRouter
 from .core.events import Event, EventBus
-from .detection.map_detector import TitleCardReader
+from .core.session import Session
+from .detection.detector import MatchDetector
 from .detection.service import DetectionService
+from .features.killer_select import KillerSelectFeature
 from .features.map_overlay import MapOverlayFeature
+from .features.streaks import StreakFeature
+from .features.streaks.icons import Icons
+from .features.streaks.rules import Rules
+from .features.streaks.service import StreakService
 from .ipc import ControlServer
 from .storage.db import Database
-from .ui.overlay import OverlayWindow, create_engine, platform_variant
+from .ui.overlay import HudWindow, OverlayWindow, create_engine, platform_variant
+from .ui.settings import SettingsWindow
 from .ui.tray import Tray
 
 log = logging.getLogger(__name__)
@@ -60,7 +67,10 @@ class App:
         self.control = ControlServer(paths.control_socket_name(), self.router.dispatch)
         self.tray = Tray(self.router.dispatch)
 
-        catalog = load_maps()
+        catalog, killers = load_maps(), load_killers()
+        self.session = Session(self.bus, paths.state_file())
+        self.killer_select = KillerSelectFeature(self.bus, self.router, killers, self.session, self.tray.notify)
+
         self.detection: DetectionService | None = None
         try:
             locator, capture = platform.create(self.cfg.capture.window_class)
@@ -69,7 +79,7 @@ class App:
         else:
             debug_dir = paths.data_dir() / "debug" if self.cfg.general.save_failed_frames else None
             self.detection = DetectionService(
-                locator, capture, TitleCardReader(catalog), self.bus, self.cfg.capture.poll_seconds, debug_dir
+                locator, capture, MatchDetector(catalog, killers), self.bus, self.cfg.capture.poll_seconds, debug_dir
             )
 
         self.qml, self.images = create_engine(platform_variant())
@@ -89,6 +99,51 @@ class App:
                 # Without detection we can't know where the game is: assume visible.
                 game_visible=self.detection is None,
             )
+
+        h = self.cfg.hud
+        self.streaks: StreakFeature | None = None
+        try:
+            hud = HudWindow(self.qml, self.images, (h.x, h.y), h.opacity, h.scale)
+        except RuntimeError as e:
+            log.error("streak HUD disabled: %s", e)
+        else:
+            self.streaks = StreakFeature(
+                self.bus, self.router, StreakService(self.db, Rules.from_config(self.cfg.streaks)),
+                self.session, hud, Icons(paths.assets_dir(o.assets_dir)),
+                show_mode=h.show, notify=self.tray.notify, save_position=self._save_hud_position,
+                game_visible=self.detection is None,
+            )
+        self.router.register("edit-hud", self._cmd_edit)
+
+        self.settings = SettingsWindow()
+        self.settings.saved.connect(self._on_settings_saved)
+        self.router.register("settings", self._cmd_settings)
+
+    def _cmd_settings(self) -> str:
+        self.settings.open(self.cfg.streaks, self.cfg.hud, self.streaks.streak_list() if self.streaks else [])
+        return "settings open"
+
+    def _on_settings_saved(self, streaks, hud_mode: str, history: bool, active: dict) -> None:
+        self.cfg.streaks, self.cfg.hud.show = streaks, hud_mode
+        config_mod.save(self.cfg, self.config_path)
+        if self.streaks is not None:
+            msg = self.streaks.apply_settings(Rules.from_config(streaks), hud_mode, history, active)
+            self.tray.notify("Settings", msg)
+
+    def _cmd_edit(self) -> str:
+        """One hotkey edits every movable window (overlay + HUD) together."""
+        parts = [f for f in (self.map_feature, self.streaks) if f is not None]
+        if not parts:
+            raise ValueError("no overlay windows")
+        editing = not any(f.editing for f in parts)
+        for f in parts:
+            f.set_editing(editing)
+        return "editing" if editing else "locked"
+
+    def _save_hud_position(self, pos: tuple[int, int]) -> None:
+        self.cfg.hud.x, self.cfg.hud.y = pos
+        config_mod.save(self.cfg, self.config_path)
+        log.info("HUD position saved: %s", pos)
 
     def _save_overlay_geometry(self, geometry: tuple[int, int, int, int]) -> None:
         o = self.cfg.overlay

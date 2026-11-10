@@ -4,6 +4,7 @@
     dbd-overlay ctl <command>   send a command to the running app (for Hyprland binds)
     dbd-overlay ctl --list      list commands
     dbd-overlay replay <dir>    run detection on saved screenshots
+    dbd-overlay export <file>   match history to .json / .csv (import <file.json> to restore)
 """
 
 from __future__ import annotations
@@ -35,10 +36,26 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("--interval", type=float, default=1.0, help="assumed seconds between frames")
     rp.add_argument("-v", "--verbose", action="store_true", help="also list frames without a title card")
 
+    ex = sub.add_parser("export", help="export match history (.json or .csv)")
+    ex.add_argument("path", type=Path)
+    im = sub.add_parser("import", help="import matches from a .json export (duplicates skipped)")
+    im.add_argument("path", type=Path)
+
     args = ap.parse_args(argv)
 
     if args.cmd == "ctl":
         return _ctl(args)
+    if args.cmd in ("export", "import"):
+        from .storage import export as ex_mod
+        from .storage.db import Database
+
+        db = Database(paths.db_file())  # safe while the app runs: SQLite handles both
+        if args.cmd == "export":
+            print(f"exported {ex_mod.export(db, args.path)} matches to {args.path}")
+        else:
+            added, skipped = ex_mod.import_json(db, args.path)
+            print(f"imported {added} matches ({skipped} already present); restart the app to refresh the HUD")
+        return 0
     if args.cmd == "replay":
         from .detection import replay
 

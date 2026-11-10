@@ -17,7 +17,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from .models import ManualOutcome, MatchResult, Role
+from .models import ManualOutcome, MatchResult, Role, SurvivorOutcome
 
 log = logging.getLogger(__name__)
 
@@ -63,6 +63,25 @@ class KillerDetected(Event):
     killer: str
     confidence: float
     source: str = "auto"
+
+
+@dataclass(frozen=True)
+class ScoreboardRead(Event):
+    """What the end-of-match scoreboard told us (raw rows kept for results, M7)."""
+
+    killer: str | None
+    role: Role | None
+    my_row: int | None
+    killer_row: int | None
+    own_name: str
+    rows: tuple[str, ...]
+    result: str = ""  # the result banner before it: 'ESCAPED', 'SACRIFICED', 'BRUTAL KILLER'...
+    survivors: tuple[SurvivorOutcome, ...] = ()  # status icon per survivor row
+    hatch_used: bool | None = None  # inferred from End Game Collapse (see match_tracker)
+
+    @property
+    def complete(self) -> bool:
+        return self.killer is not None and self.role is not None
 
 
 @dataclass(frozen=True)

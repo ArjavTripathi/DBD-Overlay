@@ -1,9 +1,146 @@
 {
-  "225200.png": {"realm": "Backwater Swamp", "map": "The Pale Rose"},
-  "225204.png": {"realm": "Backwater Swamp", "map": "The Pale Rose"},
-  "225205.png": null,
-  "225210.png": null,
-  "233047.png": null,
-  "224831.png": null,
-  "230226.png": null
+  "162330.webp": {
+    "egc": true,
+    "end": null
+  },
+  "162411.webp": {
+    "end": {
+      "kind": "result"
+    },
+    "map": null
+  },
+  "162429.webp": {
+    "end": {
+      "kind": "scoreboard",
+      "killer": "The Pig",
+      "role": "survivor"
+    },
+    "statuses": "EEEK"
+  },
+  "162806.webp": {
+    "map": {
+      "realm": "Sleepless District",
+      "map": "Trickster's Delusion"
+    },
+    "end": null
+  },
+  "163240.webp": {
+    "egc": false
+  },
+  "163245.webp": {
+    "end": null
+  },
+  "163428.webp": {
+    "end": {
+      "kind": "result"
+    }
+  },
+  "163432.webp": {
+    "end": {
+      "kind": "scoreboard",
+      "killer": "The Nightmare",
+      "role": "survivor"
+    },
+    "statuses": "AAKA"
+  },
+  "163859.webp": {
+    "map": {
+      "realm": "Dvarka Deepwood",
+      "map": "Toba Landing"
+    },
+    "end": null
+  },
+  "164012.webp": {
+    "end": null
+  },
+  "164026.webp": {
+    "egc": false,
+    "end": null
+  },
+  "164713.webp": {
+    "egc": true,
+    "end": null
+  },
+  "164734.webp": {
+    "end": {
+      "kind": "result"
+    }
+  },
+  "164740.webp": {
+    "end": {
+      "kind": "scoreboard",
+      "killer": "The Hillbilly",
+      "role": "killer"
+    },
+    "statuses": "FEKK"
+  },
+  "224831.png": {
+    "map": null,
+    "end": null,
+    "lobby": true
+  },
+  "225200.png": {
+    "map": {
+      "realm": "Backwater Swamp",
+      "map": "The Pale Rose"
+    },
+    "end": null,
+    "lobby": false
+  },
+  "225204.png": {
+    "map": {
+      "realm": "Backwater Swamp",
+      "map": "The Pale Rose"
+    },
+    "end": null
+  },
+  "225205.png": {
+    "map": null,
+    "end": null
+  },
+  "225210.png": {
+    "map": null,
+    "end": null,
+    "lobby": false,
+    "egc": false
+  },
+  "230217.png": {
+    "map": null,
+    "end": {
+      "kind": "result"
+    },
+    "lobby": false
+  },
+  "230221.png": {
+    "end": {
+      "kind": "bloodpoints"
+    },
+    "lobby": false
+  },
+  "230226.png": {
+    "map": null,
+    "end": {
+      "kind": "scoreboard",
+      "killer": "The Slasher",
+      "role": "killer"
+    },
+    "lobby": false,
+    "statuses": "EKEK"
+  },
+  "230228.png": {
+    "end": {
+      "kind": "scoreboard",
+      "killer": "The Slasher",
+      "role": "killer"
+    }
+  },
+  "233047.png": {
+    "map": null,
+    "end": null
+  },
+  "233233.png": {
+    "map": null,
+    "end": null,
+    "lobby": true
+  }
 }

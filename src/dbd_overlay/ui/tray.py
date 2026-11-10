@@ -1,4 +1,5 @@
-"""System tray icon. Menu items go through the CommandRouter, same as hotkeys.
+"""System tray icon. Left-click opens settings, right-click shows the menu.
+Menu items go through the CommandRouter, same as hotkeys.
 
 On Hyprland the tray needs a StatusNotifier host, e.g. waybar's `tray` module.
 """
@@ -42,6 +43,7 @@ MENU: list[tuple[str, str] | None] = [  # (label, command); None = separator
     ("Ignore last match", "streak-ignore"),
     ("Undo last result", "streak-undo"),
     None,
+    ("Settings…", "settings"),
     ("Quit", "quit"),
 ]
 
@@ -62,7 +64,9 @@ class Tray(QObject):
             act.triggered.connect(lambda _=False, c=cmd: self._run(c))
             menu.addAction(act)
         self._menu = menu  # keep a Python reference or Qt may free it
-        self.icon.setContextMenu(menu)
+        self.icon.setContextMenu(menu)  # right-click
+        # Left-click: open settings (most bars send "activate" on left-click).
+        self.icon.activated.connect(self._on_activated)
 
     def show(self) -> None:
         if not QSystemTrayIcon.isSystemTrayAvailable():
@@ -71,6 +75,10 @@ class Tray(QObject):
 
     def notify(self, title: str, msg: str) -> None:
         self.icon.showMessage(title, msg, QSystemTrayIcon.MessageIcon.Information, 4000)
+
+    def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            self._run("settings")
 
     def _run(self, cmd: str) -> None:
         reply = self._dispatch(cmd)

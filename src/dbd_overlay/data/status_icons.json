@@ -1,0 +1,19 @@
+{
+  "_comment": "16x16 shape signatures of scoreboard status icons (see detection/status_icons.py). Regenerate/extend from labelled frames; no DC sample yet.",
+  "icons": {
+    "escaped": [
+      "0ffc1fcc1808018801880f480fc81b480708078c0d8c1d0c310800081f981ff8",
+      "1ffc1fcc1808018801880f480fc81b480708078c0d8c1d0c310800181f981ff8"
+    ],
+    "killed": [
+      "0400078007e00ff00df809980f901ff00ff00fe004200420062003e001e000e0",
+      "0400078007e00ff00df809980f901ff00ff00ff004200620062003e001e000e0"
+    ],
+    "surrendered": [
+      "0300038003c003f807de048e0bce187e30043002380030003000300070003000"
+    ],
+    "alive": [
+      "03c007e007e007e00fe007e007c007c003c00fe07ff87ffe7ffe7ffe07b80400"
+    ]
+  }
+}

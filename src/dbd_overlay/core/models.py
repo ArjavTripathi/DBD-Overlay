@@ -23,6 +23,9 @@ class SurvivorOutcome(StrEnum):
     KILLED = "killed"            # sacrificed, mori'd, bled out: all the same skull icon
     SURRENDERED = "surrendered"  # flag icon; always counts as a kill
     DISCONNECTED = "disconnected"
+    # Person silhouette: still playing when YOU left the trial (you died and
+    # left early), so their final outcome is not known. Rules treat it as unknown.
+    ALIVE = "alive"
     UNKNOWN = "unknown"          # detector wasn't sure
 
 
@@ -31,6 +34,14 @@ class ManualOutcome(StrEnum):
 
     WIN = "win"
     LOSS = "loss"
+
+
+class Verdict(StrEnum):
+    """A match judged by the win rules. UNKNOWN = facts missing (ask the user)."""
+
+    WIN = "win"
+    LOSS = "loss"
+    UNKNOWN = "unknown"
 
 
 @dataclass(frozen=True)
@@ -71,6 +82,11 @@ class MatchResult:
     source: str = "auto"  # "auto" | "manual"
     ignored: bool = False
     notes: str = ""
+    # Verdict under the rules active when it was recorded (or recomputed).
+    verdict: Verdict = Verdict.UNKNOWN
+    # Was this streak switched on when the match was played? Off = kept in the
+    # history but doesn't affect the streak (like a pause).
+    counted: bool = True
     ts: datetime = field(default_factory=lambda: datetime.now(UTC))
     id: int | None = None
 

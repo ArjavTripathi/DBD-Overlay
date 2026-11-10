@@ -1,7 +1,7 @@
 """Regions of interest, independent of resolution.
 
 Coordinates are in units of the window HEIGHT, measured from the left or
-right edge. DBD's HUD scales with window height and hugs the screen edges, so
+right edge, or from the horizontal centre (for centred UI like the EGC bar). DBD's HUD scales with window height and hugs the screen edges, so
 "0.08 heights from the left" is the same spot at 1080p, 1440p and (assumed,
 unverified) on ultrawide, where width fractions would drift.
 """
@@ -20,14 +20,16 @@ class Roi:
     y0: float
     x1: float
     y1: float
-    anchor: Literal["left", "right"] = "left"
+    anchor: Literal["left", "right", "center"] = "left"
 
     def rect(self, width: int, height: int) -> tuple[int, int, int, int]:
         """Pixel (left, top, right, bottom), clamped to the frame."""
         if self.anchor == "left":
             l, r = self.x0 * height, self.x1 * height
-        else:
+        elif self.anchor == "right":
             l, r = width - self.x1 * height, width - self.x0 * height
+        else:  # centre: x0/x1 are offsets from the horizontal centre (negative = left)
+            l, r = width / 2 + self.x0 * height, width / 2 + self.x1 * height
 
         def clamp(v: float, hi: int) -> int:
             return max(0, min(hi, round(v)))

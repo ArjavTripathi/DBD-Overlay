@@ -14,7 +14,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from ..core.models import ManualOutcome, MatchResult, Role, SurvivorOutcome
+from ..core.models import ManualOutcome, MatchResult, Role, SurvivorOutcome, Verdict
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +45,22 @@ MIGRATIONS: list[str] = [
         ts       TEXT NOT NULL,
         category TEXT NOT NULL
     );
+    """,
+    # v2: cache each match's verdict under the rules active when recorded.
+    """
+    ALTER TABLE matches ADD COLUMN verdict TEXT NOT NULL DEFAULT 'unknown'
+        CHECK (verdict IN ('win', 'loss', 'unknown'));
+    """,
+    # v3: streaks can be switched on/off; each match remembers whether its
+    # streak was on when it was played. Streaks that already have matches
+    # start ON (they were being tracked); new ones default to OFF.
+    """
+    ALTER TABLE matches ADD COLUMN counted INTEGER NOT NULL DEFAULT 1;
+    CREATE TABLE streaks (
+        category TEXT PRIMARY KEY,
+        active   INTEGER NOT NULL DEFAULT 0
+    );
+    INSERT INTO streaks (category, active) SELECT DISTINCT category, 1 FROM matches;
     """,
 ]
 
@@ -84,14 +100,14 @@ class Database:
         with self.conn:  # commits on success, rolls back on exception
             cur = self.conn.execute(
                 """INSERT INTO matches (ts, role, killer, realm, map, survivors, my_index,
-                       hatch_used, manual_outcome, source, ignored, notes, category)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       hatch_used, manual_outcome, source, ignored, notes, category, verdict, counted)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     m.ts.isoformat(), m.role.value, m.killer, m.realm, m.map,
                     json.dumps([s.value for s in m.survivors]), m.my_index,
                     None if m.hatch_used is None else int(m.hatch_used),
                     m.manual_outcome.value if m.manual_outcome else None,
-                    m.source, int(m.ignored), m.notes, m.category,
+                    m.source, int(m.ignored), m.notes, m.category, m.verdict.value, int(m.counted),
                 ),
             )
         m.id = cur.lastrowid
@@ -121,6 +137,37 @@ class Database:
         with self.conn:
             self.conn.execute("UPDATE matches SET ignored = ? WHERE id = ?", (int(ignored), match_id))
 
+    def set_counted(self, match_id: int, counted: bool) -> None:
+        with self.conn:
+            self.conn.execute("UPDATE matches SET counted = ? WHERE id = ?", (int(counted), match_id))
+
+    # -- streak on/off ------------------------------------------------------
+
+    def streak_active(self, category: str) -> bool:
+        row = self.conn.execute("SELECT active FROM streaks WHERE category = ?", (category,)).fetchone()
+        return bool(row["active"]) if row else False  # never switched on = off
+
+    def set_streak_active(self, category: str, active: bool) -> None:
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO streaks (category, active) VALUES (?, ?) "
+                "ON CONFLICT (category) DO UPDATE SET active = excluded.active",
+                (category, int(active)),
+            )
+
+    def streak_states(self) -> dict[str, bool]:
+        """Every known streak (switched on/off before, or with matches) -> on?"""
+        states = {r["category"]: False for r in self.conn.execute("SELECT DISTINCT category FROM matches")}
+        states.update({r["category"]: bool(r["active"]) for r in self.conn.execute("SELECT * FROM streaks")})
+        return states
+
+    def set_verdict(self, match_id: int, verdict: Verdict, manual: ManualOutcome | None = None) -> None:
+        with self.conn:
+            self.conn.execute(
+                "UPDATE matches SET verdict = ?, manual_outcome = ? WHERE id = ?",
+                (verdict.value, manual.value if manual else None, match_id),
+            )
+
     def delete_match(self, match_id: int) -> None:
         with self.conn:
             self.conn.execute("DELETE FROM matches WHERE id = ?", (match_id,))
@@ -130,6 +177,12 @@ class Database:
     def add_reset(self, category: str, ts: datetime) -> None:
         with self.conn:
             self.conn.execute("INSERT INTO streak_resets (ts, category) VALUES (?, ?)", (ts.isoformat(), category))
+
+    def delete_last_reset(self, category: str) -> None:
+        with self.conn:
+            self.conn.execute(
+                "DELETE FROM streak_resets WHERE id = (SELECT id FROM streak_resets WHERE category = ? "
+                "ORDER BY ts DESC, id DESC LIMIT 1)", (category,))
 
     def last_reset(self, category: str) -> datetime | None:
         row = self.conn.execute(
@@ -153,4 +206,6 @@ def _row_to_match(r: sqlite3.Row) -> MatchResult:
         source=r["source"],
         ignored=bool(r["ignored"]),
         notes=r["notes"],
+        verdict=Verdict(r["verdict"]),
+        counted=bool(r["counted"]),
     )

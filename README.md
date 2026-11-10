@@ -7,7 +7,8 @@ overlay and a per-killer / survivor winstreak HUD.
 draws its own separate windows. It never reads or writes game memory, injects
 anything, or touches game files.
 
-> Status: milestone 4. Map detection + map overlay work; streaks are not built yet.
+> Status: milestone 7. Map overlay, match/role/killer detection, per-survivor
+> results and the winstreak HUD work; win rules are set in a settings window.
 
 ## Install / run
 
@@ -89,6 +90,9 @@ hl.bind(mainMod .. " + W",         hl.dsp.exec_cmd(dbd .. "streak-win"))
 hl.bind(mainMod .. " + L",         hl.dsp.exec_cmd(dbd .. "streak-loss"))
 hl.bind(mainMod .. " + I",         hl.dsp.exec_cmd(dbd .. "streak-ignore"))
 hl.bind(mainMod .. " + Z",         hl.dsp.exec_cmd(dbd .. "streak-undo"))
+hl.bind(mainMod .. " + H",         hl.dsp.exec_cmd(dbd .. "toggle-hud"))
+hl.bind(mainMod .. " + T",         hl.dsp.exec_cmd(dbd .. "streak-toggle"))
+hl.bind(mainMod .. " + O",         hl.dsp.exec_cmd(dbd .. "edit-hud"))
 ```
 
 Classic `hyprland.conf`:
@@ -104,7 +108,8 @@ The map picker (a normal window, class `dbd-overlay`) should float:
 hl.window_rule({ match = { class = "^(dbd-overlay)$" }, float = true, pin = true })
 ```
 
-The tray icon needs a StatusNotifier host, e.g. waybar's `tray` module.
+The tray icon (a red "D") needs a StatusNotifier host: waybar's `tray` module,
+Noctalia's tray, etc. Left-click opens settings, right-click shows the menu.
 
 ## Map detection
 
@@ -121,6 +126,129 @@ OCR), OCRs both lines with Tesseract, and fuzzy-matches them against
 Only the bottom-left strip of the window is captured (~1% of one CPU core at 1 fps).
 Detection pauses while the game's workspace isn't visible.
 
+## Match end, role and killer
+
+The end-of-match screens (result banner, bloodpoints, scoreboard) all show a
+big red title top-left; the app watches a small box there (red-pixel count
+first, OCR only when it's red). The first one ends the match (the overlay
+hides). On the scoreboard it reads:
+
+- each row's `CHARACTER  player name` line: the row whose character is a
+  killer (`data/killers.json`) gives **the killer**;
+- **your player name**, top-right under the currencies;
+- **your role**: killer if your name is on the killer row, else survivor.
+
+Nothing about your account is configured: it works for anyone. If something
+can't be read, a picker asks (killer), and the frame is saved to `debug/`.
+If the lobby's PLAY/READY/CANCEL button shows up mid-match (disconnect,
+crash), the match is ended too.
+
+Your killer is remembered across restarts (`state.json`, last killer you
+played, never the opponent's). Manual override:
+
+- `dbd-overlay ctl pick-killer`: searchable list
+- `dbd-overlay ctl set-killer trapper`: by name (aliases like `billy`, `ghostface` work)
+
+## Winstreaks
+
+One **survivor** streak and one streak **per killer**. Each match is stored
+with its raw facts (role, killer, map, each survivor's outcome, hatch,
+auto/manual); streak numbers are computed from that history, never stored.
+
+| Number | Meaning |
+|---|---|
+| streak | consecutive wins since the last reset |
+| attempt | "Attempt #N": losses since the last reset + 1 |
+| best | longest streak ever (a reset doesn't erase it) |
+
+### Which streaks are on
+
+Not every game is a streak. Each streak (survivor, each killer) is switched
+**on or off**; only matches played while their streak is on count. Matches
+are always saved either way, so pausing a streak and resuming later continues
+where you left off, and switching one off never erases counted wins.
+
+- New streaks start **off**. (After upgrading, streaks you already had matches in stay on.)
+- `streak-toggle` switches your current streak (the killer you're on, or
+  survivor). Pressed **right after a match** (within 10 min) while off, it
+  also counts the match you just played, for when you forgot to turn it on.
+- The settings window lists every streak with a checkbox.
+- The HUD shows `(off)` with dimmed numbers for a streak that isn't on, and
+  doesn't ask "win or loss?" for it.
+
+### Win rules (`[streaks]` in the config)
+
+Killer presets (`killer_preset`). "Removed" = killed/sacrificed/mori'd,
+surrendered (always), or disconnected (if `dc_counts_as_kill = true`):
+
+| Preset | Win when |
+|---|---|
+| `4k` | all 4 survivors removed |
+| `3k_hatch` (default) | all 4 removed, **or** 3 removed and the last one escaped through the **hatch** (a gate escape is a loss) |
+| `3k_any` | at least 3 removed; the 4th may escape any way |
+| `custom` | `custom_killer_required` removed; `custom_killer_count_hatch = true` counts a hatch escape as removed |
+
+Survivor presets (`survivor_preset`):
+
+| Preset | Win when |
+|---|---|
+| `i_escape` (default) | you escape (gate or hatch) |
+| `3_out` | at least 3 survivors escape, you or not (SWF) |
+| `4_out` | all 4 escape |
+| `custom` | `custom_survivor_self_escape` and/or at least `custom_survivor_min_escapes` out |
+
+If the facts can't decide (e.g. `3k_hatch` with one escape: hatch and gate
+look identical on the scoreboard), the match is marked **"win or loss?"** on
+the HUD instead of guessing. Each match keeps the verdict it got when it was
+recorded, so a rule change applies from now on; `ctl streak-recompute`
+re-applies the current rules to the whole history (undoable).
+
+**Settings window** (`ctl settings` or the tray menu): presets, custom
+rules, DC option and HUD mode, with a plain-English description of the
+active rule. "Save" applies from now on; "Save & apply to history" re-judges
+past matches. Changes take effect immediately.
+
+### What is read automatically
+
+At the scoreboard each survivor's **status icon** is classified by shape:
+
+| Icon | Recorded as |
+|---|---|
+| exit door | escaped (gate and hatch look the same) |
+| skull | killed / sacrificed |
+| white flag | surrendered (always counts as a kill) |
+| person silhouette | still in the trial when you left (you died early): unknown |
+| anything else (e.g. a disconnect: no sample yet) | unknown, frame saved to `debug/` |
+
+Your own outcome as survivor comes from the result banner (ESCAPED / SACRIFICED).
+
+**Hatch vs gate** isn't visible on the scoreboard, so it's inferred: opening
+a gate always starts the **End Game Collapse** (the bar across the top). If
+the app watched the match from the title card to the end (no gap over 30 s)
+and never saw the EGC, every escape was through the hatch. If the EGC
+appeared, both were possible, so a `3k_hatch` match with one escape asks you.
+
+### Recording
+
+- **Automatic**: at the scoreboard the match is recorded and judged. If the
+  rules can't decide from what was read, the HUD asks **win or loss?**.
+- `streak-win` / `streak-loss`: fill in or correct the match that was just
+  auto-recorded (within 10 min, once); otherwise record a new match for your
+  current role/killer (for games detection missed).
+- `streak-toggle`: switch the current streak on/off (see above).
+- `streak-ignore`: the last match doesn't count (DC, bugged game); again to un-ignore.
+- `streak-undo`: undo the last streak action (record, win/loss, ignore, reset, recompute).
+- `streak-reset`: start the current streak over (attempt #1).
+- `set-role killer|survivor`, `set-killer <name>`: choose the streak manually.
+- `toggle-hud`: show/hide the HUD (`[hud] show = "match_end" | "always" | "hotkey"`).
+- `dbd-overlay export history.csv` / `.json`, `dbd-overlay import history.json`.
+
+### Icons
+
+Optional, user-supplied: `assets/icons/killers/<killer>.png` (e.g.
+`The Trapper.png` or just `Trapper.webp`) and `assets/icons/survivor.png`.
+Without them the HUD shows text only. `[hud] scale` resizes it.
+
 ### Replay (no game needed)
 
 ```sh
@@ -128,6 +256,10 @@ uv run dbd-overlay replay ~/dbd-samples                       # what does it see
 uv run dbd-overlay replay tests/fixtures/screens \
     --manifest tests/fixtures/screens/manifest.json           # regression check
 ```
+
+Replay runs the same detector as the live app and prints the events it would
+publish. The manifest lists per-file expectations (`map`, `end`, `lobby`); see
+`detection/replay.py`.
 
 ## Development
 

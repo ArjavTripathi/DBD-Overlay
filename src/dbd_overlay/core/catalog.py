@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from functools import cache
 from importlib import resources
 
-from .models import Map
+from .models import Killer, Map
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,19 @@ class MapCatalog:
         return MapCatalog(tuple(realms))
 
 
+def _data(name: str) -> dict:
+    return json.loads(resources.files("dbd_overlay.data").joinpath(name).read_text(encoding="utf-8"))
+
+
 @cache
 def load_maps() -> MapCatalog:
-    text = resources.files("dbd_overlay.data").joinpath("maps.json").read_text(encoding="utf-8")
-    return MapCatalog.from_dict(json.loads(text))
+    return MapCatalog.from_dict(_data("maps.json"))
+
+
+@cache
+def load_killers() -> tuple[Killer, ...]:
+    return tuple(Killer(k["name"], tuple(k.get("aliases", ()))) for k in _data("killers.json")["killers"])
+
+
+def find_killer(name: str) -> Killer | None:
+    return next((k for k in load_killers() if k.name == name), None)
